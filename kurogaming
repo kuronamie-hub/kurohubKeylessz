@@ -1,0 +1,2324 @@
+
+if not game:IsLoaded() then game.Loaded:Wait() end
+
+local env = (getgenv and getgenv()) or _G
+if type(env.NemoHubs_AnimeDice_Unload) == "function" then
+	pcall(env.NemoHubs_AnimeDice_Unload)
+end
+
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local TeleportService = game:GetService("TeleportService")
+local VirtualInputManager = game:GetService("VirtualInputManager")
+local UIS = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
+local HttpService = game:GetService("HttpService")
+local MarketplaceService = game:GetService("MarketplaceService")
+local Lighting = game:GetService("Lighting")
+local LocalPlayer = Players.LocalPlayer
+
+-- Silence Luau unknown-global warnings for executor globals.
+local syn    = rawget(getfenv and getfenv() or _G, "syn")    or _G.syn
+local fluxus = rawget(getfenv and getfenv() or _G, "fluxus") or _G.fluxus
+
+local LOGO_ID = "none"
+
+----------------------------------------------------------------------
+-- THEME
+----------------------------------------------------------------------
+local Theme = {
+	Bg         = Color3.fromRGB(11, 11, 14),
+	Card       = Color3.fromRGB(16, 16, 21),
+	CardStroke = Color3.fromRGB(38, 38, 48),
+	Row        = Color3.fromRGB(23, 23, 30),
+	RowHi      = Color3.fromRGB(34, 34, 44),
+	Stroke     = Color3.fromRGB(40, 40, 50),
+	Text       = Color3.fromRGB(240, 240, 245),
+	Sub        = Color3.fromRGB(150, 150, 168),
+	Muted      = Color3.fromRGB(96, 96, 112),
+	Accent     = Color3.fromRGB(255, 132, 56),
+	AccentDeep = Color3.fromRGB(255, 84, 92),
+	Success    = Color3.fromRGB(80, 220, 140),
+	Off        = Color3.fromRGB(50, 50, 62),
+}
+
+local LEFT, CENTER, RIGHT = Enum.TextXAlignment.Left, Enum.TextXAlignment.Center, Enum.TextXAlignment.Right
+local WHITE = Color3.new(1, 1, 1)
+
+local function new(class, props, parent)
+	local o = Instance.new(class)
+	if o:IsA("GuiObject") then o.BorderSizePixel = 0 end
+	if o:IsA("GuiButton") then o.AutoButtonColor = false end
+	for k, v in pairs(props or {}) do o[k] = v end
+	o.Parent = parent
+	return o
+end
+
+local function corner(o, r) return new("UICorner", { CornerRadius = UDim.new(0, r or 6) }, o) end
+local function stroke(o, col, th)
+	return new("UIStroke", { Color = col or Theme.Stroke, Thickness = th or 1, ApplyStrokeMode = Enum.ApplyStrokeMode.Border }, o)
+end
+local function pad(o, l, t, r, b)
+	return new("UIPadding", {
+		PaddingLeft = UDim.new(0, l or 0), PaddingTop = UDim.new(0, t or 0),
+		PaddingRight = UDim.new(0, r or 0), PaddingBottom = UDim.new(0, b or 0)
+	}, o)
+end
+local function list(o, gap, dir)
+	return new("UIListLayout", {
+		Padding = UDim.new(0, gap or 6), SortOrder = Enum.SortOrder.LayoutOrder,
+		FillDirection = dir or Enum.FillDirection.Vertical
+	}, o)
+end
+local function tween(o, t, props, style, dir)
+	local tw = TweenService:Create(o, TweenInfo.new(t, style or Enum.EasingStyle.Quad, dir or Enum.EasingDirection.Out), props)
+	tw:Play()
+	return tw
+end
+local function mkLabel(props, parent)
+	props.BackgroundTransparency = 1
+	props.Font = props.Font or Enum.Font.GothamMedium
+	props.TextColor3 = props.TextColor3 or Theme.Text
+	props.TextSize = props.TextSize or 12
+	props.Text = props.Text or ""
+	return new("TextLabel", props, parent)
+end
+local function isPress(i)
+	return i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch
+end
+local function isMove(i)
+	return i.UserInputType == Enum.UserInputType.MouseMovement or i.UserInputType == Enum.UserInputType.Touch
+end
+local function gradient(o, c1, c2, rot)
+	return new("UIGradient", { Color = ColorSequence.new(c1, c2), Rotation = rot or 0 }, o)
+end
+
+----------------------------------------------------------------------
+-- ICONS
+----------------------------------------------------------------------
+local function Icon(kind, parent, size, color)
+	size = size or 20
+	color = color or Theme.Sub
+	local s = size / 20
+	local holder = new("Frame", {
+		Size = UDim2.fromOffset(size, size), BackgroundTransparency = 1,
+		AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5),
+	}, parent)
+	local parts = {}
+
+	local function bar(cx, cy, w, h, rot)
+		local f = new("Frame", {
+			Size = UDim2.fromOffset(w * s, h * s), AnchorPoint = Vector2.new(0.5, 0.5),
+			Position = UDim2.fromOffset(cx * s, cy * s), Rotation = rot or 0, BackgroundColor3 = color,
+		}, holder)
+		corner(f, math.min(w, h) * s / 2)
+		parts[#parts + 1] = { f, "bg" }
+		return f
+	end
+	local function ring(x, y, d, th)
+		local f = new("Frame", {
+			Size = UDim2.fromOffset(d * s, d * s), Position = UDim2.fromOffset(x * s, y * s), BackgroundTransparency = 1,
+		}, holder)
+		corner(f, d * s / 2)
+		local st = stroke(f, color, math.max(1, th * s))
+		parts[#parts + 1] = { st, "stroke" }
+		return f
+	end
+
+	if kind == "info" then
+		ring(1, 1, 18, 2)
+		bar(10, 6, 2.4, 2.4)
+		bar(10, 11.5, 2, 6)
+	elseif kind == "chevrons" then
+		bar(8.5, 6.5, 2.2, 8, -45); bar(8.5, 13.5, 2.2, 8, 45)
+		bar(13.5, 6.5, 2.2, 8, -45); bar(13.5, 13.5, 2.2, 8, 45)
+	elseif kind == "tower" then
+		bar(10, 4, 6, 3); bar(10, 9.5, 10, 3); bar(10, 15, 15, 3)
+	elseif kind == "up" then
+		bar(10, 11.5, 2.4, 11); bar(7, 6.5, 2.2, 8, 45); bar(13, 6.5, 2.2, 8, -45)
+	elseif kind == "flask" then
+		bar(10, 6, 5, 9); bar(10, 2.5, 9, 2)
+		local b = new("Frame", {
+			Size = UDim2.fromOffset(14 * s, 14 * s), Position = UDim2.fromOffset(3 * s, 5 * s), BackgroundColor3 = color,
+		}, holder)
+		corner(b, 7 * s)
+		parts[#parts + 1] = { b, "bg" }
+	elseif kind == "coin" then
+		ring(1, 1, 18, 2)
+		local t = mkLabel({
+			Text = "$", Font = Enum.Font.GothamBlack, TextSize = math.max(8, math.floor(11 * s)),
+			TextColor3 = color, Size = UDim2.fromScale(1, 1),
+		}, holder)
+		parts[#parts + 1] = { t, "text" }
+	elseif kind == "sliders" then
+		bar(10, 4, 16, 2); bar(10, 10, 16, 2); bar(10, 16, 16, 2)
+		bar(13, 4, 6, 6); bar(6, 10, 6, 6); bar(12, 16, 6, 6)
+	elseif kind == "search" then
+		ring(2, 2, 12, 2)
+		bar(15.5, 15.5, 2.2, 6, -45)
+	elseif kind == "chev" then
+		bar(6.5, 9, 2.2, 9, -45); bar(13.5, 9, 2.2, 9, 45)
+	elseif kind == "min" then
+		bar(10, 10, 14, 2)
+	else
+		bar(10, 10, 6, 6)
+	end
+
+	local obj = { Frame = holder }
+	function obj:SetColor(c)
+		for _, p in ipairs(parts) do
+			local inst, k = p[1], p[2]
+			if k == "bg" then inst.BackgroundColor3 = c
+			elseif k == "stroke" then inst.Color = c
+			elseif k == "text" then inst.TextColor3 = c end
+		end
+	end
+	function obj:TweenColor(c, t)
+		for _, p in ipairs(parts) do
+			local inst, k = p[1], p[2]
+			if k == "bg" then tween(inst, t or 0.18, { BackgroundColor3 = c })
+			elseif k == "stroke" then tween(inst, t or 0.18, { Color = c })
+			elseif k == "text" then tween(inst, t or 0.18, { TextColor3 = c }) end
+		end
+	end
+	return obj
+end
+
+----------------------------------------------------------------------
+-- UI LIBRARY
+----------------------------------------------------------------------
+local function MakeUI(cfg)
+	local W = {}
+	local Conns, Flags = {}, {}
+	local current
+	local loading, dirty = false, false
+	local toastOrder, tabCount = 0, 0
+
+	local function connect(sig, fn)
+		local c = sig:Connect(fn)
+		Conns[#Conns + 1] = c
+		return c
+	end
+	local function fire(cb, ...)
+		if not cb then return end
+		local args = { ... }
+		task.spawn(function()
+			local ok, err = pcall(cb, table.unpack(args))
+			if not ok then warn("[NemoHubs] callback error: " .. tostring(err)) end
+		end)
+	end
+
+	local canFile = typeof(writefile) == "function" and typeof(readfile) == "function" and typeof(isfile) == "function"
+	local function save()
+		if not canFile then return end
+		local data = {}
+		for flag, obj in pairs(Flags) do data[flag] = obj.Value end
+		pcall(function()
+			if typeof(makefolder) == "function" and typeof(isfolder) == "function" and not isfolder(cfg.Folder) then
+				makefolder(cfg.Folder)
+			end
+			writefile(cfg.Folder .. "/" .. cfg.File, HttpService:JSONEncode(data))
+		end)
+	end
+	local function changed()
+		if loading or dirty then return end
+		dirty = true
+		task.delay(0.6, function()
+			dirty = false
+			save()
+		end)
+	end
+
+	local function cleanOld()
+		local spots = {}
+		pcall(function() spots[#spots + 1] = gethui() end)
+		pcall(function() spots[#spots + 1] = game:GetService("CoreGui") end)
+		spots[#spots + 1] = LocalPlayer:FindFirstChild("PlayerGui")
+		for _, s in ipairs(spots) do
+			local old = s and s:FindFirstChild(cfg.GuiName)
+			if old then old:Destroy() end
+		end
+		local oldBlur = Lighting:FindFirstChild("NemoBlur")
+		if oldBlur then oldBlur:Destroy() end
+	end
+	cleanOld()
+
+	local gui = new("ScreenGui", {
+		Name = cfg.GuiName, ResetOnSpawn = false, DisplayOrder = 999,
+		ZIndexBehavior = Enum.ZIndexBehavior.Sibling, IgnoreGuiInset = true
+	})
+	pcall(function() if syn and syn.protect_gui then syn.protect_gui(gui) end end)
+	local okParent = pcall(function() gui.Parent = (gethui and gethui()) or game:GetService("CoreGui") end)
+	if not okParent or not gui.Parent then gui.Parent = LocalPlayer:WaitForChild("PlayerGui") end
+
+	-- Blur applied to the game world behind the menu
+	local blur = Instance.new("BlurEffect")
+	blur.Name = "NemoBlur"
+	blur.Size = 0
+	blur.Parent = Lighting
+
+	local cam = workspace.CurrentCamera
+	local vp = cam and cam.ViewportSize or Vector2.new(1024, 768)
+	local w, h = math.min(780, vp.X - 24), math.min(520, vp.Y - 24)
+	local SIDE_W, HEAD_H = 188, 56
+	local TAB_H, TAB_GAP = 40, 4
+
+	local win = new("Frame", {
+		Name = "Window", Size = UDim2.fromOffset(w, h),
+		AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5), BackgroundTransparency = 1,
+	}, gui)
+	local winScale = new("UIScale", { Scale = 0.92 }, win)
+
+	local shadow = new("ImageLabel", {
+		Image = "rbxassetid://6014261993", ImageColor3 = Color3.new(0, 0, 0), ImageTransparency = 1,
+		ScaleType = Enum.ScaleType.Slice, SliceCenter = Rect.new(49, 49, 450, 450),
+		BackgroundTransparency = 1, Size = UDim2.new(1, 70, 1, 70), Position = UDim2.fromOffset(-35, -35), ZIndex = 0,
+	}, win)
+
+	local main = new("CanvasGroup", {
+		Name = "Main", Active = true, GroupTransparency = 1,
+		Size = UDim2.fromScale(1, 1), BackgroundColor3 = Theme.Bg, BackgroundTransparency = 0.12,
+	}, win)
+	corner(main, 14)
+	stroke(main, Theme.Stroke)
+
+	local isOpen = false
+	local function setOpen(v)
+		local want = (v == true)
+		if want == isOpen then return end
+		isOpen = want
+		if want then
+			win.Visible = true
+			winScale.Scale = 0.92
+			main.GroupTransparency = 1
+			tween(winScale, 0.35, { Scale = 1 }, Enum.EasingStyle.Back, Enum.EasingDirection.Out)
+			tween(main, 0.25, { GroupTransparency = 0 })
+			tween(shadow, 0.3, { ImageTransparency = 0.3 })
+			tween(blur, 0.3, { Size = 18 })
+		else
+			tween(winScale, 0.2, { Scale = 0.94 }, Enum.EasingStyle.Quad, Enum.EasingDirection.In)
+			tween(main, 0.2, { GroupTransparency = 1 })
+			tween(shadow, 0.2, { ImageTransparency = 1 })
+			tween(blur, 0.2, { Size = 0 })
+			task.delay(0.22, function()
+				if isOpen == false then win.Visible = false end
+			end)
+		end
+	end
+
+	local header = new("Frame", { Active = true, Size = UDim2.new(1, 0, 0, HEAD_H), BackgroundTransparency = 1 }, main)
+
+	-- Header logo (spinning gradient ring + logo image), sits beside the name
+	local logo = new("Frame", {
+		Size = UDim2.fromOffset(36, 36), Position = UDim2.fromOffset(16, 10), BackgroundColor3 = Theme.Accent,
+	}, header)
+	corner(logo, 18)
+	local logoGrad = gradient(logo, Theme.Accent, Theme.AccentDeep, 45)
+	local logoImg = new("ImageLabel", {
+		Size = UDim2.fromOffset(32, 32), AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5),
+		BackgroundColor3 = Theme.Bg, Image = LOGO_ID, ScaleType = Enum.ScaleType.Crop,
+	}, logo)
+	corner(logoImg, 16)
+	task.spawn(function()
+		while logo.Parent do
+			logoGrad.Rotation = 0
+			local tw = tween(logoGrad, 6, { Rotation = 360 }, Enum.EasingStyle.Linear)
+			tw.Completed:Wait()
+		end
+	end)
+
+	mkLabel({
+		Text = string.upper(cfg.Name), Font = Enum.Font.GothamBlack, TextSize = 14,
+		Size = UDim2.fromOffset(110, HEAD_H), Position = UDim2.fromOffset(60, 0), TextXAlignment = LEFT,
+	}, header)
+
+	local gameLbl = mkLabel({
+		Text = game.Name, TextSize = 10, TextColor3 = Theme.Sub, TextXAlignment = LEFT,
+		TextTruncate = Enum.TextTruncate.AtEnd,
+		Size = UDim2.new(1, -490, 1, 0), Position = UDim2.fromOffset(176, 0),
+	}, header)
+
+	local hideBtn = new("TextButton", {
+		Text = "", Size = UDim2.fromOffset(28, 28), AnchorPoint = Vector2.new(1, 0.5),
+		Position = UDim2.new(1, -16, 0.5, 0), BackgroundTransparency = 1,
+	}, header)
+	local minIcon = Icon("min", hideBtn, 16, Theme.Sub)
+	connect(hideBtn.MouseEnter, function() minIcon:TweenColor(Theme.Text, 0.12) end)
+	connect(hideBtn.MouseLeave, function() minIcon:TweenColor(Theme.Sub, 0.12) end)
+
+	local searchBtn = new("TextButton", {
+		Text = "", Size = UDim2.fromOffset(28, 28), AnchorPoint = Vector2.new(1, 0.5),
+		Position = UDim2.new(1, -50, 0.5, 0), BackgroundTransparency = 1,
+	}, header)
+	local searchIcon = Icon("search", searchBtn, 16, Theme.Sub)
+	connect(searchBtn.MouseEnter, function() searchIcon:TweenColor(Theme.Accent, 0.12) end)
+	connect(searchBtn.MouseLeave, function() searchIcon:TweenColor(Theme.Sub, 0.12) end)
+
+	local pill = new("Frame", {
+		Size = UDim2.fromOffset(78, 26), AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, -86, 0.5, 0),
+		BackgroundColor3 = Theme.Accent, BackgroundTransparency = 0.88,
+	}, header)
+	corner(pill, 13)
+	stroke(pill, Theme.Accent).Transparency = 0.6
+	mkLabel({ Text = cfg.Version, TextSize = 10, Font = Enum.Font.GothamBold, TextColor3 = Theme.Accent, Size = UDim2.fromScale(1, 1) }, pill)
+
+	local searchBox = new("Frame", {
+		Size = UDim2.fromOffset(0, 30), AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, -176, 0.5, 0),
+		BackgroundColor3 = Theme.Row, Visible = false, ClipsDescendants = true,
+	}, header)
+	corner(searchBox, 15)
+	stroke(searchBox, Theme.Accent)
+	local search = new("TextBox", {
+		Size = UDim2.new(1, -24, 1, 0), Position = UDim2.fromOffset(12, 0), BackgroundTransparency = 1,
+		Text = "", PlaceholderText = "Search...", PlaceholderColor3 = Theme.Muted, TextColor3 = Theme.Text,
+		Font = Enum.Font.GothamMedium, TextSize = 11, TextXAlignment = LEFT, ClearTextOnFocus = false,
+	}, searchBox)
+
+	local searchOpen = false
+	connect(searchBtn.MouseButton1Click, function()
+		searchOpen = not searchOpen
+		if searchOpen then
+			searchBox.Visible = true
+			gameLbl.Visible = false
+			tween(searchBox, 0.28, { Size = UDim2.fromOffset(190, 30) }, Enum.EasingStyle.Quint)
+			task.delay(0.1, function() search:CaptureFocus() end)
+		else
+			search.Text = ""
+			local tw = tween(searchBox, 0.2, { Size = UDim2.fromOffset(0, 30) }, Enum.EasingStyle.Quint)
+			tw.Completed:Connect(function()
+				if searchOpen == false then
+					searchBox.Visible = false
+					gameLbl.Visible = true
+				end
+			end)
+		end
+	end)
+
+	local lineHost = new("Frame", {
+		Size = UDim2.new(1, -32, 0, 2), Position = UDim2.fromOffset(16, HEAD_H), BackgroundColor3 = Theme.Accent,
+		BackgroundTransparency = 0.7, ClipsDescendants = true,
+	}, main)
+	corner(lineHost, 1)
+	local shimmer = new("Frame", {
+		Size = UDim2.fromScale(0.3, 1), Position = UDim2.fromScale(-0.3, 0), BackgroundColor3 = Theme.Accent,
+	}, lineHost)
+	gradient(shimmer, Theme.Accent, Theme.AccentDeep, 0).Transparency = NumberSequence.new({
+		NumberSequenceKeypoint.new(0, 1),
+		NumberSequenceKeypoint.new(0.5, 0),
+		NumberSequenceKeypoint.new(1, 1),
+	})
+	task.spawn(function()
+		while shimmer.Parent do
+			shimmer.Position = UDim2.fromScale(-0.3, 0)
+			local tw = tween(shimmer, 2.4, { Position = UDim2.fromScale(1, 0) }, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut)
+			tw.Completed:Wait()
+			task.wait(0.8)
+		end
+	end)
+
+	local bodyY = HEAD_H + 6
+	local bodyHost = new("Frame", {
+		Size = UDim2.new(1, 0, 1, -bodyY), Position = UDim2.fromOffset(0, bodyY), BackgroundTransparency = 1,
+	}, main)
+
+	local side = new("Frame", { Size = UDim2.new(0, SIDE_W, 1, 0), BackgroundTransparency = 1 }, bodyHost)
+	local tabScroll = new("ScrollingFrame", {
+		Size = UDim2.new(1, -18, 1, -84), Position = UDim2.fromOffset(10, 8), BackgroundTransparency = 1,
+		ScrollBarThickness = 0, AutomaticCanvasSize = Enum.AutomaticSize.Y, CanvasSize = UDim2.new(),
+		ScrollingDirection = Enum.ScrollingDirection.Y,
+	}, side)
+
+	local ind = new("Frame", {
+		Size = UDim2.new(1, 0, 0, TAB_H), BackgroundColor3 = Theme.Accent, BackgroundTransparency = 0.88, Visible = false,
+	}, tabScroll)
+	corner(ind, 10)
+	stroke(ind, Theme.Accent).Transparency = 0.7
+	local indBar = new("Frame", {
+		Size = UDim2.fromOffset(3, 18), Position = UDim2.new(0, 0, 0.5, -9), BackgroundColor3 = Theme.Accent,
+	}, ind)
+	corner(indBar, 2)
+	gradient(indBar, Theme.Accent, Theme.AccentDeep, 90)
+
+	local tabInner = new("Frame", {
+		Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, BackgroundTransparency = 1,
+	}, tabScroll)
+	list(tabInner, TAB_GAP)
+
+	new("Frame", {
+		Size = UDim2.new(0, 1, 1, -14), Position = UDim2.fromOffset(SIDE_W, 7), BackgroundColor3 = Theme.Stroke,
+	}, bodyHost)
+
+	local gcard = new("Frame", {
+		Size = UDim2.new(1, -20, 0, 56), Position = UDim2.new(0, 10, 1, -66), BackgroundColor3 = Theme.Card,
+	}, side)
+	corner(gcard, 12)
+	stroke(gcard, Theme.CardStroke)
+	local gimg = new("ImageLabel", {
+		Size = UDim2.fromOffset(38, 38), Position = UDim2.fromOffset(9, 9), BackgroundColor3 = Theme.Row,
+		Image = "rbxthumb://type=GameIcon&id=" .. tostring(game.GameId) .. "&w=150&h=150",
+	}, gcard)
+	corner(gimg, 19)
+	stroke(gimg, Theme.Accent, 1.5)
+	local gname = mkLabel({
+		Text = game.Name, Font = Enum.Font.GothamBold, TextSize = 11, TextXAlignment = LEFT,
+		TextTruncate = Enum.TextTruncate.AtEnd,
+		Size = UDim2.new(1, -62, 0, 16), Position = UDim2.fromOffset(56, 11),
+	}, gcard)
+	local dot = new("Frame", { Size = UDim2.fromOffset(6, 6), Position = UDim2.fromOffset(57, 33), BackgroundColor3 = Theme.Success }, gcard)
+	corner(dot, 3)
+	mkLabel({
+		Text = "Connected", TextSize = 9, TextColor3 = Theme.Sub, TextXAlignment = LEFT,
+		Size = UDim2.new(1, -76, 0, 12), Position = UDim2.fromOffset(68, 30),
+	}, gcard)
+	task.spawn(function()
+		while dot.Parent do
+			tween(dot, 0.9, { BackgroundTransparency = 0.6 }, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut)
+			task.wait(0.9)
+			tween(dot, 0.9, { BackgroundTransparency = 0 }, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut)
+			task.wait(0.9)
+		end
+	end)
+
+	task.spawn(function()
+		local ok, info = pcall(function() return MarketplaceService:GetProductInfo(game.PlaceId) end)
+		if ok and type(info) == "table" and info.Name then
+			gameLbl.Text = info.Name
+			gname.Text = info.Name
+		end
+	end)
+
+	local content = new("Frame", {
+		Size = UDim2.new(1, -(SIDE_W + 1), 1, 0), Position = UDim2.fromOffset(SIDE_W + 1, 0), BackgroundTransparency = 1,
+	}, bodyHost)
+
+	do
+		local dragging, startIn, startPos
+		connect(header.InputBegan, function(i)
+			if isPress(i) then
+				dragging, startIn, startPos = true, i.Position, win.Position
+				local c
+				c = i.Changed:Connect(function()
+					if i.UserInputState == Enum.UserInputState.End then
+						dragging = false
+						c:Disconnect()
+					end
+				end)
+			end
+		end)
+		connect(UIS.InputChanged, function(i)
+			if dragging and isMove(i) then
+				local d = i.Position - startIn
+				win.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + d.X, startPos.Y.Scale, startPos.Y.Offset + d.Y)
+			end
+		end)
+	end
+
+	do
+		local grip = new("TextButton", {
+			Text = "◢", TextSize = 12, Font = Enum.Font.GothamBold, TextColor3 = Theme.Muted,
+			BackgroundTransparency = 1, Size = UDim2.fromOffset(20, 20), AnchorPoint = Vector2.new(1, 1),
+			Position = UDim2.new(1, -4, 1, -4), ZIndex = 20,
+		}, main)
+		connect(grip.MouseEnter, function() grip.TextColor3 = Theme.Accent end)
+		connect(grip.MouseLeave, function() grip.TextColor3 = Theme.Muted end)
+		local resizing, startIn, startSize, startPos
+		connect(grip.InputBegan, function(i)
+			if isPress(i) then
+				resizing, startIn, startSize, startPos = true, i.Position, win.AbsoluteSize, win.Position
+				local c
+				c = i.Changed:Connect(function()
+					if i.UserInputState == Enum.UserInputState.End then
+						resizing = false
+						c:Disconnect()
+					end
+				end)
+			end
+		end)
+		connect(UIS.InputChanged, function(i)
+			if resizing and isMove(i) then
+				local d = i.Position - startIn
+				local nw = math.clamp(startSize.X + d.X, 600, math.max(vp.X - 10, 600))
+				local nh = math.clamp(startSize.Y + d.Y, 380, math.max(vp.Y - 10, 380))
+				win.Size = UDim2.fromOffset(nw, nh)
+				win.Position = UDim2.new(
+					startPos.X.Scale, startPos.X.Offset + (nw - startSize.X) / 2,
+					startPos.Y.Scale, startPos.Y.Offset + (nh - startSize.Y) / 2
+				)
+			end
+		end)
+	end
+
+	connect(hideBtn.MouseButton1Click, function() setOpen(false) end)
+
+	do
+		local openBtn = new("TextButton", {
+			Name = "OpenButton", Text = "", Size = UDim2.fromOffset(152, 38),
+			AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.new(0.5, 0, 0, 12),
+			BackgroundColor3 = Theme.Bg, BackgroundTransparency = 0.08, ZIndex = 100,
+		}, gui)
+		corner(openBtn, 19)
+		local ost = stroke(openBtn, WHITE, 1.5)
+		gradient(ost, Theme.Accent, Theme.AccentDeep, 0)
+
+		local oimg = new("ImageLabel", {
+			Size = UDim2.fromOffset(28, 28), Position = UDim2.fromOffset(6, 5),
+			BackgroundColor3 = Theme.Row, Image = LOGO_ID, ScaleType = Enum.ScaleType.Crop, ZIndex = 101,
+		}, openBtn)
+		corner(oimg, 14)
+
+		mkLabel({
+			Text = "NemoHubs", Font = Enum.Font.GothamBold, TextSize = 13, TextXAlignment = LEFT,
+			Size = UDim2.new(1, -46, 1, 0), Position = UDim2.fromOffset(42, 0), ZIndex = 101,
+		}, openBtn)
+
+		connect(openBtn.MouseEnter, function()
+			tween(openBtn, 0.15, { Size = UDim2.fromOffset(160, 40), BackgroundTransparency = 0 })
+		end)
+		connect(openBtn.MouseLeave, function()
+			tween(openBtn, 0.15, { Size = UDim2.fromOffset(152, 38), BackgroundTransparency = 0.08 })
+		end)
+
+		local down, moved, sp, si = false, false, nil, nil
+		connect(openBtn.InputBegan, function(i)
+			if isPress(i) then
+				down, moved, sp, si = true, false, openBtn.Position, i.Position
+				local c
+				c = i.Changed:Connect(function()
+					if i.UserInputState == Enum.UserInputState.End then
+						if down and not moved then setOpen(not isOpen) end
+						down = false
+						c:Disconnect()
+					end
+				end)
+			end
+		end)
+		connect(UIS.InputChanged, function(i)
+			if down and isMove(i) then
+				local d = i.Position - si
+				if d.Magnitude > 6 then moved = true end
+				if moved then
+					openBtn.Position = UDim2.new(sp.X.Scale, sp.X.Offset + d.X, sp.Y.Scale, sp.Y.Offset + d.Y)
+				end
+			end
+		end)
+	end
+	connect(UIS.InputBegan, function(i, gp)
+		if not gp and i.KeyCode == Enum.KeyCode.RightShift then setOpen(not isOpen) end
+	end)
+
+	local toasts = new("Frame", {
+		Size = UDim2.new(0, 270, 1, -24), Position = UDim2.new(1, -14, 0, 12),
+		AnchorPoint = Vector2.new(1, 0), BackgroundTransparency = 1, ZIndex = 200,
+	}, gui)
+	local tl = list(toasts, 6)
+	tl.VerticalAlignment = Enum.VerticalAlignment.Bottom
+	tl.HorizontalAlignment = Enum.HorizontalAlignment.Right
+
+	function W:Notify(t, msg, dur)
+		toastOrder += 1
+		dur = dur or 3
+		local slot = new("Frame", {
+			Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y,
+			BackgroundTransparency = 1, LayoutOrder = toastOrder,
+		}, toasts)
+		local f = new("Frame", {
+			Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y,
+			BackgroundColor3 = Theme.Card, Position = UDim2.new(1, 60, 0, 0),
+			ClipsDescendants = true, ZIndex = 201,
+		}, slot)
+		corner(f, 10)
+		stroke(f, Theme.CardStroke)
+
+		local lead = new("Frame", { Size = UDim2.new(0, 3, 1, 0), BackgroundColor3 = Theme.Accent }, f)
+		gradient(lead, Theme.Accent, Theme.AccentDeep, 90)
+
+		local inner = new("Frame", {
+			Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, BackgroundTransparency = 1,
+		}, f)
+		pad(inner, 16, 10, 12, 14)
+		list(inner, 3)
+
+		mkLabel({
+			Text = t, Font = Enum.Font.GothamBold, TextColor3 = Theme.Accent, TextXAlignment = LEFT,
+			Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, TextWrapped = true, LayoutOrder = 1,
+			TextSize = 12,
+		}, inner)
+		mkLabel({
+			Text = msg, TextColor3 = Theme.Text, TextSize = 11, TextXAlignment = LEFT,
+			Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, TextWrapped = true, LayoutOrder = 2,
+		}, inner)
+
+		local prog = new("Frame", {
+			Size = UDim2.new(1, 0, 0, 2), Position = UDim2.new(0, 0, 1, -2), BackgroundColor3 = Theme.Accent,
+		}, f)
+		gradient(prog, Theme.Accent, Theme.AccentDeep, 0)
+
+		tween(f, 0.45, { Position = UDim2.new(0, 0, 0, 0) }, Enum.EasingStyle.Back)
+		tween(prog, dur, { Size = UDim2.new(0, 0, 0, 2) }, Enum.EasingStyle.Linear)
+
+		task.delay(dur, function()
+			if f.Parent then
+				tween(f, 0.3, { Position = UDim2.new(1, 60, 0, 0) }, Enum.EasingStyle.Quad, Enum.EasingDirection.In)
+				task.wait(0.32)
+				if slot.Parent then slot:Destroy() end
+			end
+		end)
+	end
+
+	local function applySearch()
+		if not current then return end
+		local q = search.Text:lower()
+		for _, c in ipairs(current.Cards) do
+			local titleMatch = q == "" or c.Title:lower():find(q, 1, true) ~= nil
+			local any = false
+			for _, it in ipairs(c.Items) do
+				local m = titleMatch or it.Name:find(q, 1, true) ~= nil
+				it.Row.Visible = m
+				if m then any = true end
+			end
+			c.Frame.Visible = any or #c.Items == 0
+		end
+	end
+	connect(search:GetPropertyChangedSignal("Text"), applySearch)
+
+	local function setActive(t, on)
+		local active = (on == true)
+		if active then
+			t.root.Visible = true
+			t.root.Position = UDim2.fromOffset(0, 16)
+			t.root.GroupTransparency = 1
+			tween(t.root, 0.35, { Position = UDim2.fromOffset(0, 0), GroupTransparency = 0 }, Enum.EasingStyle.Quint)
+			t.icon:TweenColor(Theme.Accent, 0.2)
+			t.tx.TextColor3 = WHITE
+			t.tx.Font = Enum.Font.GothamBold
+			t.iconHost.Rotation = -14
+			tween(t.iconHost, 0.4, { Rotation = 0 }, Enum.EasingStyle.Back)
+			t.underline.Size = UDim2.fromOffset(0, 3)
+			tween(t.underline, 0.5, { Size = UDim2.fromOffset(34, 3) }, Enum.EasingStyle.Quint)
+		else
+			t.root.Visible = false
+			t.icon:TweenColor(Theme.Sub, 0.2)
+			t.tx.TextColor3 = Theme.Sub
+			t.tx.Font = Enum.Font.GothamMedium
+		end
+	end
+	local function selectTab(t)
+		if current == t then return end
+		local first = (current == nil)
+		if current then setActive(current, false) end
+		current = t
+		setActive(t, true)
+		local y = (t.index - 1) * (TAB_H + TAB_GAP)
+		if first then
+			ind.Position = UDim2.fromOffset(0, y)
+			ind.Visible = true
+		else
+			tween(ind, 0.38, { Position = UDim2.fromOffset(0, y) }, Enum.EasingStyle.Quint)
+			indBar.Size = UDim2.fromOffset(3, 28)
+			tween(indBar, 0.4, { Size = UDim2.fromOffset(3, 18) }, Enum.EasingStyle.Back)
+		end
+		search.Text = ""
+		applySearch()
+	end
+
+	function W:Tab(name, icon, subtitle)
+		tabCount += 1
+		local tab = { Cards = {}, Count = 0, index = tabCount }
+
+		tab.btn = new("TextButton", {
+			Text = "", Size = UDim2.new(1, 0, 0, TAB_H), BackgroundColor3 = WHITE,
+			BackgroundTransparency = 1, LayoutOrder = tabCount,
+		}, tabInner)
+		corner(tab.btn, 10)
+
+		tab.iconHost = new("Frame", {
+			Size = UDim2.fromOffset(36, TAB_H), Position = UDim2.fromOffset(6, 0), BackgroundTransparency = 1,
+		}, tab.btn)
+		tab.icon = Icon(icon or "dot", tab.iconHost, 18, Theme.Sub)
+
+		tab.tx = mkLabel({
+			Text = name, Size = UDim2.new(1, -52, 1, 0), Position = UDim2.fromOffset(46, 0),
+			TextXAlignment = LEFT, TextColor3 = Theme.Sub, Font = Enum.Font.GothamMedium, TextSize = 12,
+			TextTruncate = Enum.TextTruncate.AtEnd,
+		}, tab.btn)
+
+		connect(tab.btn.MouseEnter, function()
+			if current ~= tab then
+				tween(tab.btn, 0.15, { BackgroundTransparency = 0.94 })
+				tween(tab.tx, 0.15, { TextColor3 = Theme.Text })
+			end
+		end)
+		connect(tab.btn.MouseLeave, function()
+			tween(tab.btn, 0.15, { BackgroundTransparency = 1 })
+			if current ~= tab then tween(tab.tx, 0.15, { TextColor3 = Theme.Sub }) end
+		end)
+
+		tab.root = new("CanvasGroup", { Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, Visible = false }, content)
+		mkLabel({
+			Text = name, Font = Enum.Font.GothamBlack, TextSize = 18, TextXAlignment = LEFT,
+			Size = UDim2.new(1, -32, 0, 24), Position = UDim2.fromOffset(18, 4),
+		}, tab.root)
+		mkLabel({
+			Text = subtitle or "", TextSize = 10, TextColor3 = Theme.Sub, TextXAlignment = LEFT,
+			Size = UDim2.new(1, -32, 0, 14), Position = UDim2.fromOffset(18, 28),
+		}, tab.root)
+		tab.underline = new("Frame", {
+			Size = UDim2.fromOffset(34, 3), Position = UDim2.fromOffset(18, 46), BackgroundColor3 = Theme.Accent,
+		}, tab.root)
+		corner(tab.underline, 2)
+		gradient(tab.underline, Theme.Accent, Theme.AccentDeep, 0)
+
+		local page = new("ScrollingFrame", {
+			Size = UDim2.new(1, 0, 1, -56), Position = UDim2.fromOffset(0, 56), BackgroundTransparency = 1,
+			ScrollBarThickness = 3, ScrollBarImageColor3 = Theme.Muted,
+			AutomaticCanvasSize = Enum.AutomaticSize.Y, CanvasSize = UDim2.new(),
+			ScrollingDirection = Enum.ScrollingDirection.Y,
+		}, tab.root)
+		tab.page = page
+
+		local cols = new("Frame", {
+			Size = UDim2.new(1, -34, 0, 0), Position = UDim2.fromOffset(16, 6),
+			AutomaticSize = Enum.AutomaticSize.Y, BackgroundTransparency = 1,
+		}, page)
+		list(cols, 12)
+		new("Frame", { Size = UDim2.new(1, 0, 0, 14), BackgroundTransparency = 1, LayoutOrder = 99999 }, cols)
+
+		connect(tab.btn.MouseButton1Click, function() selectTab(tab) end)
+
+		function tab:Card(cardTitle)
+			tab.Count += 1
+			local card = {}
+			local items = {}
+			local order = 0
+			local function nextOrder() order += 1; return order end
+
+			local frame = new("Frame", {
+				Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, BackgroundColor3 = Theme.Card,
+				LayoutOrder = tab.Count,
+			}, cols)
+			corner(frame, 12)
+			local frameStroke = stroke(frame, Theme.CardStroke)
+			list(frame, 0)
+
+			connect(frame.MouseEnter, function() tween(frameStroke, 0.2, { Color = Color3.fromRGB(80, 62, 52) }) end)
+			connect(frame.MouseLeave, function() tween(frameStroke, 0.2, { Color = Theme.CardStroke }) end)
+
+			local head = new("TextButton", { Text = "", Size = UDim2.new(1, 0, 0, 46), BackgroundTransparency = 1, LayoutOrder = 1 }, frame)
+			new("Frame", { Size = UDim2.fromOffset(6, 6), Position = UDim2.fromOffset(16, 20), BackgroundColor3 = Theme.Accent }, head)
+			corner(head:FindFirstChildOfClass("Frame"), 3)
+			mkLabel({
+				Text = cardTitle, Font = Enum.Font.GothamBold, TextSize = 13, TextXAlignment = LEFT,
+				Size = UDim2.new(1, -70, 1, 0), Position = UDim2.fromOffset(30, 0),
+			}, head)
+			local chev = Icon("chev", head, 14, Theme.Sub)
+			chev.Frame.Position = UDim2.new(1, -26, 0.5, 0)
+			chev.Frame.Rotation = 180
+			local line = new("Frame", {
+				Size = UDim2.new(1, -32, 0, 1), Position = UDim2.new(0, 16, 1, -1), BackgroundColor3 = Theme.Accent,
+			}, head)
+			gradient(line, Theme.Accent, Theme.AccentDeep, 0).Transparency = NumberSequence.new({
+				NumberSequenceKeypoint.new(0, 0.1),
+				NumberSequenceKeypoint.new(1, 0.9),
+			})
+
+			local cwrap = new("Frame", {
+				Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y,
+				BackgroundTransparency = 1, ClipsDescendants = true, LayoutOrder = 2,
+			}, frame)
+			local cbody = new("Frame", { Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, BackgroundTransparency = 1 }, cwrap)
+			pad(cbody, 16, 2, 16, 6)
+			list(cbody, 0)
+
+			local open, busy = true, false
+			connect(head.MouseButton1Click, function()
+				if busy then return end
+				busy = true
+				open = not open
+				tween(chev.Frame, 0.3, { Rotation = open and 180 or 0 }, Enum.EasingStyle.Back)
+				if open then
+					cwrap.AutomaticSize = Enum.AutomaticSize.None
+					cwrap.Size = UDim2.new(1, 0, 0, 0)
+					cwrap.Visible = true
+					local target = math.max(cbody.AbsoluteSize.Y, 10)
+					local tw = tween(cwrap, 0.3, { Size = UDim2.new(1, 0, 0, target) }, Enum.EasingStyle.Quint)
+					tw.Completed:Connect(function()
+						cwrap.AutomaticSize = Enum.AutomaticSize.Y
+						cwrap.Size = UDim2.new(1, 0, 0, 0)
+						busy = false
+					end)
+				else
+					local cur = cwrap.AbsoluteSize.Y
+					cwrap.AutomaticSize = Enum.AutomaticSize.None
+					cwrap.Size = UDim2.new(1, 0, 0, cur)
+					local tw = tween(cwrap, 0.28, { Size = UDim2.new(1, 0, 0, 0) }, Enum.EasingStyle.Quint)
+					tw.Completed:Connect(function() busy = false end)
+				end
+			end)
+
+			tab.Cards[#tab.Cards + 1] = { Title = cardTitle, Frame = frame, Items = items }
+
+			local function mkRow(hgt, noDiv)
+				local r = new("Frame", { Size = UDim2.new(1, 0, 0, hgt), BackgroundTransparency = 1, LayoutOrder = nextOrder() }, cbody)
+				if not noDiv then
+					new("Frame", {
+						Size = UDim2.new(1, 0, 0, 1), Position = UDim2.new(0, 0, 1, -1),
+						BackgroundColor3 = Theme.Stroke, BackgroundTransparency = 0.35,
+					}, r)
+				end
+				return r
+			end
+			local function reg(f, name)
+				items[#items + 1] = { Row = f, Name = tostring(name or ""):lower() }
+			end
+
+			function card:Toggle(o)
+				local r = mkRow(46)
+				local lbl = mkLabel({ Text = o.Name, Size = UDim2.new(1, -70, 1, 0), TextXAlignment = LEFT, TextTruncate = Enum.TextTruncate.AtEnd }, r)
+				local sw = new("Frame", {
+					Size = UDim2.fromOffset(50, 26), AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, 0, 0.5, 0),
+					BackgroundColor3 = Theme.Off,
+				}, r)
+				corner(sw, 13)
+				gradient(sw, WHITE, WHITE, 0)
+				local knob = new("Frame", { Size = UDim2.fromOffset(20, 20), Position = UDim2.fromOffset(3, 3), BackgroundColor3 = WHITE }, sw)
+				corner(knob, 10)
+				local btn = new("TextButton", { Text = "", Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1 }, r)
+				local obj = { Value = (o.Default == true) }
+				local function render(instant)
+					local pos = obj.Value and UDim2.fromOffset(27, 3) or UDim2.fromOffset(3, 3)
+					local col = obj.Value and Theme.Accent or Theme.Off
+					if instant then
+						sw.BackgroundColor3, knob.Position = col, pos
+						lbl.TextColor3 = obj.Value and WHITE or Theme.Text
+					else
+						tween(sw, 0.2, { BackgroundColor3 = col })
+						tween(knob, 0.3, { Position = pos }, Enum.EasingStyle.Back)
+						tween(lbl, 0.2, { TextColor3 = obj.Value and WHITE or Theme.Text })
+						knob.Size = UDim2.fromOffset(26, 20)
+						if obj.Value then knob.Position = UDim2.fromOffset(21, 3) end
+						tween(knob, 0.25, { Size = UDim2.fromOffset(20, 20) }, Enum.EasingStyle.Back)
+					end
+				end
+				render(true)
+				function obj:Set(v, silent)
+					obj.Value = (v == true)
+					render(false)
+					if silent ~= true then
+						fire(o.Callback, obj.Value)
+						changed()
+					end
+				end
+				connect(btn.MouseButton1Click, function() obj:Set(not obj.Value) end)
+				if o.Flag then Flags[o.Flag] = obj end
+				reg(r, o.Name)
+				return obj
+			end
+
+			function card:Button(o)
+				local r = mkRow(44, true)
+				local b = new("TextButton", {
+					Text = o.Name, Font = Enum.Font.GothamMedium, TextSize = 12, TextColor3 = Theme.Text,
+					Size = UDim2.new(1, 0, 1, -10), Position = UDim2.fromOffset(0, 5), BackgroundColor3 = Theme.Row,
+					ClipsDescendants = true,
+				}, r)
+				corner(b, 8)
+				local bs = stroke(b, Theme.Stroke)
+				connect(b.MouseEnter, function()
+					tween(b, 0.15, { BackgroundColor3 = Theme.RowHi })
+					tween(bs, 0.15, { Color = Theme.Accent })
+				end)
+				connect(b.MouseLeave, function()
+					tween(b, 0.15, { BackgroundColor3 = Theme.Row })
+					tween(bs, 0.15, { Color = Theme.Stroke })
+				end)
+				connect(b.InputBegan, function(i)
+					if isPress(i) then
+						local rel = Vector2.new(i.Position.X, i.Position.Y) - b.AbsolutePosition
+						local rp = new("Frame", {
+							Size = UDim2.fromOffset(0, 0), AnchorPoint = Vector2.new(0.5, 0.5),
+							Position = UDim2.fromOffset(rel.X, rel.Y), BackgroundColor3 = Theme.Accent,
+							BackgroundTransparency = 0.55, ZIndex = 0,
+						}, b)
+						corner(rp, 999)
+						local d = math.max(b.AbsoluteSize.X, 60) * 2.2
+						tween(rp, 0.55, { Size = UDim2.fromOffset(d, d), BackgroundTransparency = 1 }, Enum.EasingStyle.Quad)
+						task.delay(0.6, function() rp:Destroy() end)
+					end
+				end)
+				connect(b.MouseButton1Click, function() fire(o.Callback) end)
+				reg(r, o.Name)
+				return b
+			end
+
+			function card:Label(text)
+				local l = mkLabel({
+					Text = text, TextColor3 = Theme.Sub, TextSize = 11, TextXAlignment = LEFT, TextWrapped = true,
+					Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, LayoutOrder = nextOrder(),
+				}, cbody)
+				pad(l, 0, 8, 0, 8)
+				reg(l, text)
+				return l
+			end
+
+			function card:Paragraph(o)
+				local outer = new("Frame", {
+					Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y,
+					BackgroundTransparency = 1, LayoutOrder = nextOrder(),
+				}, cbody)
+				pad(outer, 0, 6, 0, 6)
+				list(outer, 0)
+				local r = new("Frame", { Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, BackgroundColor3 = Theme.Row }, outer)
+				corner(r, 8)
+				stroke(r, Theme.Stroke)
+				pad(r, 12, 10, 12, 10)
+				list(r, 4)
+				local t = mkLabel({ Text = o.Title or "", Font = Enum.Font.GothamBold, TextXAlignment = LEFT, TextWrapped = true, Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, LayoutOrder = 1 }, r)
+				local c = mkLabel({ Text = o.Content or "", TextColor3 = Theme.Sub, TextSize = 11, TextXAlignment = LEFT, TextWrapped = true, Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, LayoutOrder = 2 }, r)
+				local obj = {}
+				function obj:Set(v)
+					if type(v) ~= "table" then return end
+					if v.Title then t.Text = v.Title end
+					if v.Content then c.Text = v.Content end
+				end
+				reg(outer, (o.Title or "") .. " " .. (o.Content or ""))
+				return obj
+			end
+
+			function card:Slider(o)
+				local min, max, step = o.Min or 0, o.Max or 100, o.Step or 1
+				local r = mkRow(60)
+				mkLabel({ Text = o.Name, Size = UDim2.new(1, -90, 0, 16), Position = UDim2.fromOffset(0, 10), TextXAlignment = LEFT, TextTruncate = Enum.TextTruncate.AtEnd }, r)
+				local val = mkLabel({ Size = UDim2.new(0, 80, 0, 16), Position = UDim2.new(1, -80, 0, 10), TextXAlignment = RIGHT, TextColor3 = Theme.Accent, Font = Enum.Font.GothamBold }, r)
+				local bar = new("Frame", { Size = UDim2.new(1, 0, 0, 6), Position = UDim2.fromOffset(0, 40), BackgroundColor3 = Theme.Off }, r)
+				corner(bar, 3)
+				local fill = new("Frame", { Size = UDim2.fromScale(0, 1), BackgroundColor3 = Theme.Accent }, bar)
+				corner(fill, 3)
+				gradient(fill, Theme.Accent, Theme.AccentDeep, 0)
+				local knob = new("Frame", { Size = UDim2.fromOffset(14, 14), AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.new(0, 0, 0.5, 0), BackgroundColor3 = WHITE }, bar)
+				corner(knob, 7)
+				stroke(knob, Theme.Accent, 2)
+				local hit = new("TextButton", { Text = "", Size = UDim2.new(1, 0, 0, 28), Position = UDim2.fromOffset(0, 29), BackgroundTransparency = 1 }, r)
+				local obj = { Value = math.clamp(o.Default or min, min, max) }
+				local function render()
+					local rel = max > min and (obj.Value - min) / (max - min) or 0
+					tween(fill, 0.08, { Size = UDim2.fromScale(rel, 1) })
+					tween(knob, 0.08, { Position = UDim2.new(rel, 0, 0.5, 0) })
+					val.Text = tostring(obj.Value) .. (o.Suffix and (" " .. o.Suffix) or "")
+				end
+				render()
+				local function apply(v, silent, force)
+					v = tonumber(v) or min
+					v = math.clamp(math.floor((v - min) / step + 0.5) * step + min, min, max)
+					local ch = v ~= obj.Value
+					obj.Value = v
+					render()
+					local skip = (silent == true)
+					local forceIt = (force == true)
+					if (ch or forceIt) and not skip then
+						fire(o.Callback, v)
+						changed()
+					end
+				end
+				function obj:Set(v, silent) apply(v, silent, true) end
+				local dragging = false
+				local function fromX(x)
+					local rel = math.clamp((x - bar.AbsolutePosition.X) / math.max(bar.AbsoluteSize.X, 1), 0, 1)
+					apply(min + rel * (max - min))
+				end
+				connect(hit.MouseEnter, function() tween(knob, 0.15, { Size = UDim2.fromOffset(18, 18) }, Enum.EasingStyle.Back) end)
+				connect(hit.MouseLeave, function()
+					if not dragging then tween(knob, 0.15, { Size = UDim2.fromOffset(14, 14) }) end
+				end)
+				connect(hit.InputBegan, function(i)
+					if isPress(i) then
+						dragging = true
+						page.ScrollingEnabled = false
+						tween(knob, 0.15, { Size = UDim2.fromOffset(20, 20) }, Enum.EasingStyle.Back)
+						fromX(i.Position.X)
+						local c
+						c = i.Changed:Connect(function()
+							if i.UserInputState == Enum.UserInputState.End then
+								dragging = false
+								page.ScrollingEnabled = true
+								tween(knob, 0.2, { Size = UDim2.fromOffset(14, 14) })
+								c:Disconnect()
+							end
+						end)
+					end
+				end)
+				connect(UIS.InputChanged, function(i)
+					if dragging and isMove(i) then fromX(i.Position.X) end
+				end)
+				if o.Flag then Flags[o.Flag] = obj end
+				reg(r, o.Name)
+				return obj
+			end
+
+			function card:Input(o)
+				local r = mkRow(72)
+				mkLabel({ Text = o.Name, Size = UDim2.new(1, 0, 0, 16), Position = UDim2.fromOffset(0, 10), TextXAlignment = LEFT, TextTruncate = Enum.TextTruncate.AtEnd }, r)
+				local boxF = new("Frame", { Size = UDim2.new(1, 0, 0, 32), Position = UDim2.fromOffset(0, 32), BackgroundColor3 = Theme.Row }, r)
+				corner(boxF, 8)
+				local bst = stroke(boxF, Theme.Stroke)
+				local tb = new("TextBox", {
+					Size = UDim2.new(1, -20, 1, 0), Position = UDim2.fromOffset(10, 0), BackgroundTransparency = 1,
+					Text = tostring(o.Default or ""), PlaceholderText = o.Placeholder or "", PlaceholderColor3 = Theme.Muted,
+					TextColor3 = Theme.Text, Font = Enum.Font.GothamMedium, TextSize = 11, TextXAlignment = LEFT, ClearTextOnFocus = false,
+				}, boxF)
+				connect(tb.Focused, function() tween(bst, 0.15, { Color = Theme.Accent }) end)
+				local obj = { Value = tb.Text }
+				function obj:Set(v, silent)
+					tb.Text = tostring(v or "")
+					obj.Value = tb.Text
+					if silent ~= true then
+						fire(o.Callback, obj.Value)
+						changed()
+					end
+				end
+				connect(tb.FocusLost, function()
+					tween(bst, 0.2, { Color = Theme.Stroke })
+					obj:Set(tb.Text)
+				end)
+				if o.Flag then Flags[o.Flag] = obj end
+				reg(r, o.Name)
+				return obj
+			end
+
+			function card:Dropdown(o)
+				local multi = (o.Multi == true)
+				local options = o.Options or {}
+				local sel, single = {}, nil
+				local obj = { Value = (multi and {}) or nil }
+				local buttons = {}
+				local panelH, panelOpen = 0, false
+
+				local box = new("Frame", {
+					Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y,
+					BackgroundTransparency = 1, LayoutOrder = nextOrder(),
+				}, cbody)
+				list(box, 0)
+
+				local dh = new("Frame", { Size = UDim2.new(1, 0, 0, 48), BackgroundTransparency = 1, LayoutOrder = 1 }, box)
+				mkLabel({ Text = o.Name, Size = UDim2.new(0.45, 0, 1, 0), TextXAlignment = LEFT, TextTruncate = Enum.TextTruncate.AtEnd }, dh)
+
+				local selBtn = new("TextButton", {
+					Text = "", Size = UDim2.new(0.55, 0, 0, 34), AnchorPoint = Vector2.new(1, 0.5),
+					Position = UDim2.new(1, 0, 0.5, 0), BackgroundColor3 = Theme.Row,
+				}, dh)
+				corner(selBtn, 8)
+				local sst = stroke(selBtn, Theme.Stroke)
+
+				local valLbl = mkLabel({
+					Size = UDim2.new(1, -34, 1, 0), Position = UDim2.fromOffset(12, 0), TextXAlignment = LEFT,
+					TextTruncate = Enum.TextTruncate.AtEnd, TextSize = 10, TextColor3 = Theme.Sub,
+				}, selBtn)
+
+				local arrow = Icon("chev", selBtn, 12, Theme.Sub)
+				arrow.Frame.Position = UDim2.new(1, -16, 0.5, 0)
+
+				local panel = new("ScrollingFrame", {
+					Size = UDim2.new(1, 0, 0, 0), BackgroundColor3 = Theme.Row, ScrollBarThickness = 3,
+					ScrollBarImageColor3 = Theme.Muted, AutomaticCanvasSize = Enum.AutomaticSize.Y,
+					CanvasSize = UDim2.new(), Visible = false, LayoutOrder = 2,
+					ScrollingDirection = Enum.ScrollingDirection.Y,
+				}, box)
+				corner(panel, 8)
+				local pl = list(panel, 2)
+				pl.HorizontalAlignment = Enum.HorizontalAlignment.Center
+
+				new("Frame", { Size = UDim2.new(1, 0, 0, 2), BackgroundTransparency = 1, LayoutOrder = 0 }, panel)
+				new("Frame", {
+					Size = UDim2.new(1, 0, 0, 1), BackgroundColor3 = Theme.Stroke,
+					BackgroundTransparency = 0.35, LayoutOrder = 3,
+				}, box)
+
+				local function setPanel(v)
+					local open = (v == true)
+					panelOpen = open
+					tween(arrow.Frame, 0.25, { Rotation = open and 180 or 0 }, Enum.EasingStyle.Back)
+					tween(sst, 0.15, { Color = open and Theme.Accent or Theme.Stroke })
+					if open then
+						panel.Visible = true
+						panel.Size = UDim2.new(1, 0, 0, 0)
+						tween(panel, 0.28, { Size = UDim2.new(1, 0, 0, panelH) }, Enum.EasingStyle.Quint)
+					else
+						local tw = tween(panel, 0.2, { Size = UDim2.new(1, 0, 0, 0) }, Enum.EasingStyle.Quint)
+						tw.Completed:Connect(function()
+							if panelOpen == false then
+								panel.Visible = false
+							end
+						end)
+					end
+				end
+
+				local function selectedValue()
+					if multi == false then return single end
+					local arr, seen = {}, {}
+					for _, n in ipairs(options) do
+						if sel[n] == true then
+							arr[#arr + 1] = n
+							seen[n] = true
+						end
+					end
+					for n in pairs(sel) do
+						if seen[n] ~= true then
+							arr[#arr + 1] = n
+						end
+					end
+					return arr
+				end
+
+				local function refreshHead()
+					if multi == true then
+						local n = 0
+						for _ in pairs(sel) do n += 1 end
+						valLbl.Text = (n > 0) and (n .. " selected") or "None selected"
+						valLbl.TextColor3 = (n > 0) and Theme.Text or Theme.Sub
+					else
+						valLbl.Text = single and tostring(single) or "None selected"
+						valLbl.TextColor3 = single and Theme.Text or Theme.Sub
+					end
+				end
+
+				local function paint()
+					for name, b in pairs(buttons) do
+						local on
+						if multi == true then
+							on = (sel[name] == true)
+						else
+							on = (single == name)
+						end
+						tween(b.txt, 0.15, { TextColor3 = on and Theme.Accent or Theme.Text })
+						b.chk.Visible = on
+					end
+				end
+
+				local function commit(silent)
+					obj.Value = selectedValue()
+					refreshHead()
+					paint()
+					if silent ~= true then
+						fire(o.Callback, obj.Value)
+						changed()
+					end
+				end
+
+				local function pick(name)
+					if multi == true then
+						if sel[name] == true then
+							sel[name] = nil
+						else
+							sel[name] = true
+						end
+					else
+						single = name
+						setPanel(false)
+					end
+					commit()
+				end
+
+				local function rebuild()
+					for _, b in pairs(buttons) do b.btn:Destroy() end
+					buttons = {}
+					for i, name in ipairs(options) do
+						local b = new("TextButton", {
+							Text = "", Size = UDim2.new(1, -8, 0, 26),
+							BackgroundColor3 = Theme.RowHi, BackgroundTransparency = 1, LayoutOrder = i,
+						}, panel)
+						corner(b, 6)
+						local t = mkLabel({
+							Text = tostring(name), Size = UDim2.new(1, -28, 1, 0),
+							Position = UDim2.fromOffset(8, 0), TextXAlignment = LEFT,
+							TextTruncate = Enum.TextTruncate.AtEnd, TextSize = 11,
+						}, b)
+						local c = mkLabel({
+							Text = "✓", Font = Enum.Font.GothamBold, Size = UDim2.fromOffset(18, 26),
+							Position = UDim2.new(1, -22, 0, 0), TextColor3 = Theme.Accent, TextSize = 12,
+						}, b)
+						buttons[name] = { btn = b, txt = t, chk = c }
+						b.MouseEnter:Connect(function() tween(b, 0.1, { BackgroundTransparency = 0 }) end)
+						b.MouseLeave:Connect(function() tween(b, 0.1, { BackgroundTransparency = 1 }) end)
+						b.MouseButton1Click:Connect(function() pick(name) end)
+					end
+					panelH = math.min(#options * 28 + 8, 160)
+					if panelOpen == true then
+						panel.Size = UDim2.new(1, 0, 0, panelH)
+					end
+					paint()
+				end
+
+				if multi == true then
+					for _, n in ipairs(o.Default or {}) do
+						sel[tostring(n)] = true
+					end
+				else
+					local d = o.Default
+					if type(d) == "table" then d = d[1] end
+					single = (d ~= nil) and tostring(d) or nil
+				end
+				obj.Value = selectedValue()
+				refreshHead()
+				rebuild()
+
+				function obj:Set(v, silent)
+					if multi == true then
+						sel = {}
+						if type(v) == "table" then
+							for _, n in ipairs(v) do
+								sel[tostring(n)] = true
+							end
+						elseif type(v) == "string" then
+							sel[v] = true
+						end
+					else
+						if type(v) == "table" then v = v[1] end
+						single = (v ~= nil) and tostring(v) or nil
+					end
+					commit(silent)
+				end
+
+				function obj:Refresh(newOptions)
+					options = newOptions or {}
+					rebuild()
+				end
+
+				connect(selBtn.MouseButton1Click, function() setPanel(panelOpen == false) end)
+				if o.Flag then Flags[o.Flag] = obj end
+				reg(box, o.Name)
+				return obj
+			end
+
+			return card
+		end
+
+		if not current then selectTab(tab) end
+		return tab
+	end
+
+	function W:LoadConfig()
+		if not canFile then return end
+		local ok, data = pcall(function()
+			local path = cfg.Folder .. "/" .. cfg.File
+			if isfile(path) then return HttpService:JSONDecode(readfile(path)) end
+		end)
+		if not ok or type(data) ~= "table" then return end
+		loading = true
+		for flag, val in pairs(data) do
+			local o = Flags[flag]
+			if o then pcall(o.Set, o, val) end
+		end
+		loading = false
+	end
+
+	function W:Destroy()
+		for _, c in ipairs(Conns) do pcall(function() c:Disconnect() end) end
+		pcall(function() blur:Destroy() end)
+		pcall(function() gui:Destroy() end)
+	end
+
+	task.defer(function() setOpen(true) end)
+
+	return W
+end
+
+----------------------------------------------------------------------
+-- WINDOW + TABS
+----------------------------------------------------------------------
+local UI = MakeUI({
+	Name = "NemoHubs",
+	GuiName = "NemoHubs",
+	Version = "v1.0.0",
+	Folder = "NemoHubs",
+	File = "AnimeDice.json",
+})
+
+local AboutTab  = UI:Tab("About", "info", "Welcome to NemoHubs.")
+local AutoTab   = UI:Tab("Auto", "chevrons", "Rolling, plot, dice, upgrades, quests and rebirth automation.")
+local HubTab    = UI:Tab("AutoHub", "tower", "Tower automation.")
+local LevelTab  = UI:Tab("LevelUp", "up", "Automatically level up your equipped slots.")
+local PotionTab = UI:Tab("Potions", "flask", "Boosts, grades and traits.")
+local SellTab   = UI:Tab("Auto Sell", "coin", "Sell units by rarity.")
+local MiscTab   = UI:Tab("Misc", "sliders", "Utilities and server tools.")
+
+local aboutCard = AboutTab:Card("NemoHubs")
+aboutCard:Paragraph({
+	Title = "Anime Dice",
+	Content = "Toggle this menu with RightShift or the open button at the top. Settings are saved automatically.",
+})
+
+----------------------------------------------------------------------
+-- GAME REFERENCES
+----------------------------------------------------------------------
+local Network   = ReplicatedStorage:WaitForChild("Network")
+local Framework = ReplicatedStorage:WaitForChild("Framework")
+local Features  = Framework:WaitForChild("Features")
+
+local Remotes = {
+	RollDice        = Network.RollService.RF.RollDice,
+	SellInventory   = Network.SellService.RF.SellInventory,
+	CollectBalance  = Network.PlotService.RE.CollectBalance,
+	EquipBest       = Network.PlotService.RE.EquipBest,
+	LevelUpSlot     = Network.PlotService.RE.LevelUpSlot,
+	BuyDice         = Network.DiceShopService.RE.BuyDice,
+	EquipDice       = Network.DiceShopService.RE.EquipDice,
+	Rebirth         = Network.RebirthService.RE.Rebirth,
+	BuyUpgrade      = Network.RE.BuyUpgrade,
+	ClaimQuest      = Network.QuestService.RE.Claim,
+	PlayTower       = Network.Towers.RF.PlayTower,
+	CompleteFloor   = Network.Towers.RF.CompleteTowerFloor,
+	CancelTower     = Network.Towers.RF.CancelTower,
+	EquipTowerTeam  = Network.Towers.RE.EquipBestTowerTeam,
+	GradeRoll       = Network.GradeService.RE.Roll,
+	TraitRoll       = Network.TraitService.RE.Roll,
+	UseBoost        = Network.BoostService.RE.Use,
+}
+
+local RARITIES = {
+	"Common", "Uncommon", "Rare", "Epic", "Legendary", "Mythical",
+	"Divine", "Exotic", "Celestial", "Exclusive", "Secret1", "Secret2"
+}
+local MUTATIONS = { "Silver", "Gold", "Emerald", "Diamond", "Ruby", "Rainbow" }
+local BRANCHES = { "Luck", "Fortune", "Roll Speed", "Unit Storage", "Money", "Sell", "Damage", "Health", "Walkspeed" }
+local ROMAN = {
+	I = true, II = true, III = true, IV = true, V = true, VI = true,
+	VII = true, VIII = true, IX = true, X = true, XI = true, XII = true
+}
+
+----------------------------------------------------------------------
+-- HELPERS
+----------------------------------------------------------------------
+local unloaded = false
+local Loops, Toggles = {}, {}
+local afkConn
+
+local function alive()
+	return not unloaded and LocalPlayer.Parent ~= nil
+end
+
+local function notify(title, content)
+	task.spawn(function()
+		pcall(function() UI:Notify(title, content, 3) end)
+	end)
+end
+
+local function setSafe(obj, value)
+	if not obj then return end
+	task.spawn(function()
+		pcall(function() obj:Set(value) end)
+	end)
+end
+
+local function toSet(arr)
+	local s = {}
+	if type(arr) == "table" then
+		for _, v in ipairs(arr) do s[tostring(v)] = true end
+	elseif type(arr) == "string" then
+		s[arr] = true
+	end
+	return s
+end
+
+local function first(v)
+	if type(v) == "table" then return v[1] end
+	return v
+end
+
+local function fmtMoney(n)
+	n = tonumber(n) or 0
+	local steps = { { 1e15, "Q" }, { 1e12, "T" }, { 1e9, "B" }, { 1e6, "M" }, { 1e3, "k" } }
+	for _, s in ipairs(steps) do
+		if n >= s[1] then return ("%.2f%s"):format(n / s[1], s[2]) end
+	end
+	return tostring(math.floor(n))
+end
+
+local CHANCE_SUFFIX = { "k", "M", "B", "T", "Qd", "Qn", "Sx", "Sp", "Oc", "No", "Dc" }
+local function fmtChance(n)
+	n = tonumber(n) or 0
+	local i = 0
+	while n >= 1000 and i < #CHANCE_SUFFIX do
+		n /= 1000
+		i += 1
+	end
+	local str
+	if n >= 100 or i == 0 then
+		str = tostring(math.floor(n + 0.5))
+	else
+		str = (("%.1f"):format(n):gsub("%.0$", ""))
+	end
+	return str .. (CHANCE_SUFFIX[i] or "")
+end
+
+local moduleCache = {}
+local function getModule(path, root)
+	local inst = root or Features
+	for part in path:gmatch("[^%.]+") do
+		inst = inst and inst:FindFirstChild(part)
+	end
+	if not inst then return nil end
+	if moduleCache[inst] then return moduleCache[inst] end
+	local ok, res = pcall(require, inst)
+	if ok and res then
+		moduleCache[inst] = res
+		return res
+	end
+	return nil
+end
+
+local function getData(name)
+	local D = getModule("Data.DataController")
+	if not D then return nil end
+	local ok, res = pcall(function() return D[name]() end)
+	if ok then return res end
+	return nil
+end
+
+local function entryConfig(name)
+	local Reg = getModule("Inventory.EntryRegistry")
+	if not Reg then return nil end
+	local ok, cfg = pcall(Reg.getEntryConfig, name)
+	return ok and cfg or nil
+end
+
+local function newLoop(name, fn, delay, hidden)
+	local gen, on = 0, false
+	local loop = { Name = name, Hidden = hidden }
+
+	function loop.IsOn() return on end
+
+	function loop.Set(state)
+		on = (state == true)
+		gen += 1
+		if not on then return end
+		local id = gen
+		local function active() return on and id == gen and alive() end
+		task.spawn(function()
+			while active() do
+				local ok, res = pcall(fn, active)
+				if not ok then warn("[NemoHubs] " .. name .. ": " .. tostring(res)) end
+				local d = (ok and type(res) == "number") and res
+					or (type(delay) == "function" and delay() or delay or 1)
+				task.wait(math.max(tonumber(d) or 1, 0.1))
+			end
+		end)
+	end
+
+	Loops[#Loops + 1] = loop
+	return loop
+end
+
+local function addToggle(card, name, flag, loop, onChange)
+	local t = card:Toggle({
+		Name = name,
+		Flag = flag,
+		Callback = function(v)
+			local on = (v == true)
+			local was = loop.IsOn()
+			loop.Set(on)
+			if onChange then onChange(on, was) end
+		end
+	})
+	Toggles[#Toggles + 1] = t
+	return t
+end
+
+local function stopAll()
+	for _, t in ipairs(Toggles) do pcall(function() t:Set(false) end) end
+	for _, l in ipairs(Loops) do l.Set(false) end
+end
+
+local function unload()
+	unloaded = true
+	for _, l in ipairs(Loops) do l.Set(false) end
+	if afkConn then afkConn:Disconnect(); afkConn = nil end
+	pcall(function() UI:Destroy() end)
+	env.NemoHubs_AnimeDice_Unload = nil
+end
+env.NemoHubs_AnimeDice_Unload = unload
+
+----------------------------------------------------------------------
+-- AUTO · ROLL
+----------------------------------------------------------------------
+local rollCard = AutoTab:Card("Roll")
+
+local rollCount, rollStart, lastRoll = 0, os.clock(), "—"
+local rollPara = rollCard:Paragraph({ Title = "Fast Roll", Content = "Idle." })
+
+local function rollCooldown()
+	local BC = getModule("Buffs.BuffController")
+	if not BC then return 2.5 end
+	local ok, r = pcall(BC.GetBuff, "Roll Duration")
+	if ok and type(r) == "number" then return math.max(r, 0) end
+	return 2.5
+end
+
+local function inventoryUsage()
+	local BC = getModule("Buffs.BuffController")
+	local inv = getData("Inventory")
+	if not BC or type(inv) ~= "table" then return nil end
+	local n = 0
+	for _, item in pairs(inv) do
+		local cfg = entryConfig(item.name)
+		if cfg and cfg.kind == "Unit" then n += 1 end
+	end
+	local _, storage = pcall(BC.GetBuff, "Unit Storage")
+	local _, extra = pcall(BC.GetBuff, "Rolls")
+	return n, (tonumber(storage) or 100) + (tonumber(extra) or 1) - 1
+end
+
+local function refreshRoll(note)
+	local n, cap = inventoryUsage()
+	local elapsed = os.clock() - rollStart
+	local perMin = elapsed > 1 and rollCount / elapsed * 60 or 0
+	local lines = {
+		("Server cooldown: %.2fs"):format(rollCooldown()),
+		("Rolls: %d  (%.1f/min)"):format(rollCount, perMin),
+		"Last: " .. lastRoll,
+		n and ("Inventory: %d/%d units"):format(n, cap) or "Inventory: ?",
+	}
+	if n and cap and n >= cap then
+		lines[#lines + 1] = "Inventory full — enable Auto Sell."
+	end
+	if note then lines[#lines + 1] = note end
+	setSafe(rollPara, { Title = "Fast Roll", Content = table.concat(lines, "\n") })
+end
+
+local rollLoop = newLoop("Fast Roll", function()
+	local ok, res = pcall(function() return Remotes.RollDice:InvokeServer() end)
+	if ok and type(res) == "table" and #res > 0 then
+		rollCount += #res
+		local parts = {}
+		for _, r in ipairs(res) do
+			parts[#parts + 1] = r.mutation and (r.mutation .. " " .. tostring(r.result)) or tostring(r.result)
+		end
+		lastRoll = table.concat(parts, ", ")
+		if #lastRoll > 60 then lastRoll = lastRoll:sub(1, 57) .. "..." end
+		return math.max(rollCooldown() - 0.25, 0.1)
+	end
+	return 0.2
+end, 0.2)
+
+local rollStatusLoop = newLoop("Roll status", function()
+	refreshRoll()
+	return 2
+end, 2, true)
+
+addToggle(rollCard, "Fast Roll", "AnimeDiceFastRoll", rollLoop, function(v)
+	if v == true then
+		rollCount, rollStart = 0, os.clock()
+		rollStatusLoop.Set(true)
+	else
+		rollStatusLoop.Set(false)
+		refreshRoll("Stopped.")
+	end
+end)
+
+rollCard:Button({
+	Name = "Reset roll counter",
+	Callback = function()
+		rollCount, rollStart, lastRoll = 0, os.clock(), "—"
+		refreshRoll()
+	end
+})
+
+----------------------------------------------------------------------
+-- AUTO · PLOT
+----------------------------------------------------------------------
+local plotCard = AutoTab:Card("Plot")
+
+local collectInterval, equipInterval = 15, 10
+
+local function collectableSlots()
+	local PlotConfig = getModule("Plot.PlotConfig")
+	local slots = getData("Slots")
+	if not PlotConfig or type(slots) ~= "table" then return {}, 0 end
+	local rebirth = tonumber(getData("Rebirth")) or 0
+	local okMax, max = pcall(PlotConfig.GetMaxSlots)
+	max = okMax and tonumber(max) or 13
+	local result, total = {}, 0
+	for i = 1, max do
+		local okReq, req = pcall(PlotConfig.GetSlotRebirthRequirement, i)
+		req = okReq and tonumber(req) or math.huge
+		if req <= rebirth then
+			local slot = slots[tostring(i)]
+			local bal = slot and tonumber(slot.balance) or 0
+			if bal > 0 then
+				result[#result + 1] = i
+				total += bal
+			end
+		end
+	end
+	return result, total
+end
+
+local function collectNow()
+	local slotList, total = collectableSlots()
+	for _, i in ipairs(slotList) do
+		pcall(function() Remotes.CollectBalance:FireServer(i) end)
+		task.wait(0.05)
+	end
+	return #slotList, total
+end
+
+local collectLoop = newLoop("Auto Collect", function()
+	collectNow()
+	return collectInterval
+end, 15)
+
+local equipLoop = newLoop("Auto Equip Best", function()
+	pcall(function() Remotes.EquipBest:FireServer() end)
+	return equipInterval
+end, 10)
+
+addToggle(plotCard, "Auto Collect", "AnimeDiceAutoCollect", collectLoop)
+plotCard:Slider({
+	Name = "Collect interval", Min = 1, Max = 60, Default = 15, Step = 1, Suffix = "s",
+	Flag = "AnimeDiceCollectInterval",
+	Callback = function(v) collectInterval = math.max(tonumber(v) or 15, 1) end
+})
+addToggle(plotCard, "Auto Equip Best", "AnimeDiceAutoEquipBest", equipLoop)
+plotCard:Slider({
+	Name = "Equip interval", Min = 2, Max = 120, Default = 10, Step = 1, Suffix = "s",
+	Flag = "AnimeDiceEquipInterval",
+	Callback = function(v) equipInterval = math.max(tonumber(v) or 10, 2) end
+})
+plotCard:Button({
+	Name = "Collect now",
+	Callback = function()
+		task.spawn(function()
+			local n, total = collectNow()
+			notify("Collect", n > 0 and ("%d slots  ·  +$%s"):format(n, fmtMoney(total)) or "Nothing to collect.")
+		end)
+	end
+})
+
+----------------------------------------------------------------------
+-- AUTO · DICE
+----------------------------------------------------------------------
+local diceCard = AutoTab:Card("Dice")
+
+local function diceList()
+	local Dice = getModule("Rolling.Dice")
+	if not Dice then return {} end
+	local ok, all = pcall(Dice.GetAll)
+	if not ok or type(all) ~= "table" then return {} end
+	local result = {}
+	for name, d in pairs(all) do
+		if type(d) == "table" and d.price then
+			result[#result + 1] = { name = name, price = d.price, luck = d.luck or 0 }
+		end
+	end
+	table.sort(result, function(a, b) return a.price > b.price end)
+	return result
+end
+
+local function diceState()
+	local owned = getData("OwnedDice")
+	local money = tonumber(getData("Money")) or 0
+	local equipped = getData("Dice")
+	return type(owned) == "table" and owned or {}, money, equipped
+end
+
+local function equipBestDice()
+	local owned, _, equipped = diceState()
+	local bestName, bestLuck
+	for _, d in ipairs(diceList()) do
+		if owned[d.name] and (not bestLuck or d.luck > bestLuck) then
+			bestName, bestLuck = d.name, d.luck
+		end
+	end
+	if bestName and equipped ~= bestName then
+		pcall(function() Remotes.EquipDice:FireServer(bestName) end)
+		return bestName
+	end
+	return nil
+end
+
+local function buyDice()
+	local owned, money = diceState()
+	local bought = 0
+	for _, d in ipairs(diceList()) do
+		if not owned[d.name] and money >= d.price then
+			pcall(function() Remotes.BuyDice:FireServer(d.name) end)
+			money -= d.price
+			bought += 1
+			task.wait(0.6)
+		end
+	end
+	if bought > 0 then
+		task.wait(0.6)
+		equipBestDice()
+	end
+	return bought
+end
+
+local diceLoop = newLoop("Auto Buy Dice", function()
+	buyDice()
+	return 5
+end, 5)
+
+addToggle(diceCard, "Auto Buy Dice", "AnimeDiceAutoBuyDice", diceLoop)
+diceCard:Button({
+	Name = "Equip best owned dice",
+	Callback = function()
+		task.spawn(function()
+			local name = equipBestDice()
+			notify("Dice", name and ("Equipped: " .. name) or "Already the best.")
+		end)
+	end
+})
+
+----------------------------------------------------------------------
+-- AUTO · UPGRADES
+----------------------------------------------------------------------
+local upgradeCard = AutoTab:Card("Upgrades")
+
+local branchSet = toSet(BRANCHES)
+
+local function branchOf(name)
+	local base, numeral = tostring(name):match("^(.*)%s+(%S+)$")
+	if base and ROMAN[numeral] then return base end
+	return nil
+end
+
+local function buyUpgrades(active)
+	local Upg = getModule("Upgrades.Upgrades")
+	local Tree = getModule("Upgrades.TreeStructure")
+	local ownedRaw = getData("Upgrades")
+	if not Upg or not Tree or type(ownedRaw) ~= "table" or type(Upg) ~= "table" then return 0 end
+
+	local money = tonumber(getData("Money")) or 0
+	local owned = {}
+	for k, v in pairs(ownedRaw) do
+		if v then owned[k] = true end
+	end
+
+	local upList = {}
+	for name, up in pairs(Upg) do
+		local branch = branchOf(name)
+		if branch and branchSet[branch] and not owned[name] and type(up) == "table" and up.price then
+			upList[#upList + 1] = { name = name, price = up.price }
+		end
+	end
+	table.sort(upList, function(a, b) return a.price < b.price end)
+
+	local bought, again = 0, true
+	while again and active() do
+		again = false
+		for _, up in ipairs(upList) do
+			if not owned[up.name] and money >= up.price then
+				local okP, parent = pcall(Tree.GetParent, up.name)
+				if not okP or not parent or parent == "Start" or owned[parent] then
+					pcall(function() Remotes.BuyUpgrade:FireServer(up.name) end)
+					owned[up.name] = true
+					money -= up.price
+					bought += 1
+					again = true
+					task.wait(0.1)
+				end
+			end
+		end
+	end
+	return bought
+end
+
+local upgradeLoop = newLoop("Auto Upgrades", function(active)
+	buyUpgrades(active)
+	return 5
+end, 5)
+
+addToggle(upgradeCard, "Auto Upgrades", "AnimeDiceAutoUpgrades", upgradeLoop)
+upgradeCard:Dropdown({
+	Name = "Branches to upgrade", Options = BRANCHES, Default = table.clone(BRANCHES), Multi = true,
+	Flag = "AnimeDiceUpgradeBranches",
+	Callback = function(v) branchSet = toSet(v) end
+})
+upgradeCard:Button({
+	Name = "Buy available upgrades",
+	Callback = function()
+		task.spawn(function()
+			local n = buyUpgrades(function() return true end)
+			notify("Upgrades", n > 0 and ("%d upgrade(s) bought"):format(n) or "Nothing affordable.")
+		end)
+	end
+})
+
+----------------------------------------------------------------------
+-- AUTO · QUESTS
+----------------------------------------------------------------------
+local questCard = AutoTab:Card("Quests")
+
+local function claimQuests()
+	local D = getModule("Data.DataController")
+	local Cfg = getModule("Quests.QuestConfig")
+	if not D or not Cfg then return 0 end
+	local periods = Cfg.Periods or {}
+	local claimed = 0
+	for _, period in ipairs({ "Daily", "Weekly" }) do
+		local ok, state = pcall(function() return D.Quests[period]() end)
+		if ok and type(state) == "table" then
+			local progress, done = state.progress or {}, state.claimed or {}
+			local pcfg = periods[period]
+			for _, q in ipairs(pcfg and pcfg.quests or {}) do
+				if (progress[q.id] or 0) >= q.target and not done[q.id] then
+					pcall(function() Remotes.ClaimQuest:FireServer(period, q.id, state.expiresAt) end)
+					claimed += 1
+					task.wait(0.25)
+				end
+			end
+		end
+	end
+	return claimed
+end
+
+local questLoop = newLoop("Auto Claim Quests", function()
+	claimQuests()
+	return 10
+end, 10)
+
+addToggle(questCard, "Auto Claim Quests", "AnimeDiceAutoClaimQuests", questLoop)
+questCard:Button({
+	Name = "Claim now",
+	Callback = function()
+		task.spawn(function()
+			local n = claimQuests()
+			notify("Quests", n > 0 and ("%d quest(s) claimed"):format(n) or "Nothing to claim.")
+		end)
+	end
+})
+
+----------------------------------------------------------------------
+-- AUTO · REBIRTH
+----------------------------------------------------------------------
+local rebirthCard = AutoTab:Card("Rebirth")
+
+local function rebirthInfo()
+	local R = getModule("Rebirth.Rebirths")
+	if not R then return nil end
+	local current = tonumber(getData("Rebirth")) or 0
+	local money = tonumber(getData("Money")) or 0
+	local ok, nxt = pcall(R.GetNext, current)
+	return current, money, (ok and nxt) or nil
+end
+
+local function tryRebirth()
+	local current, money, nxt = rebirthInfo()
+	if not current or not nxt or money < nxt.cost then return false end
+	pcall(function() Remotes.Rebirth:FireServer() end)
+	task.wait(1)
+	local after = rebirthInfo()
+	if after and current < after then
+		notify("Rebirth", ("Rebirth %d  ·  luck x%s"):format(after, tostring(nxt.luckMultiplier)))
+		return true
+	end
+	return false
+end
+
+local rebirthLoop = newLoop("Auto Rebirth", function()
+	tryRebirth()
+	return 3
+end, 3)
+
+addToggle(rebirthCard, "Auto Rebirth", "AnimeDiceAutoRebirth", rebirthLoop)
+rebirthCard:Button({
+	Name = "Rebirth now",
+	Callback = function()
+		task.spawn(function()
+			local current, money, nxt = rebirthInfo()
+			if not current then
+				notify("Rebirth", "Game data not loaded yet.")
+			elseif not nxt then
+				notify("Rebirth", ("Max level reached (%d)."):format(current))
+			elseif not tryRebirth() then
+				if money >= nxt.cost then
+					notify("Rebirth", "Rebirth did not go through.")
+				else
+					notify("Rebirth", ("Missing $%s."):format(fmtMoney(nxt.cost - money)))
+				end
+			end
+		end)
+	end
+})
+
+----------------------------------------------------------------------
+-- LEVELUP
+----------------------------------------------------------------------
+local levelCard = LevelTab:Card("Auto Level Up")
+local levelSettings = LevelTab:Card("Settings")
+
+local levelMinRarity, levelTarget = "Common", 10
+
+local function levelPass(active)
+	local Reg = getModule("Inventory.EntryRegistry")
+	local Rar = getModule("Other.Rarities", Framework)
+	local UU = getModule("Inventory.Kinds.Unit.UnitUtil")
+	local slots, inv = getData("Slots"), getData("Inventory")
+	if not Reg or not Rar or not UU or type(slots) ~= "table" or type(inv) ~= "table" then return 0 end
+
+	local okMin, minOrder = pcall(function() return Rar.Get(levelMinRarity).sortOrder end)
+	minOrder = okMin and minOrder or 0
+
+	local count = 0
+	for key, slot in pairs(slots) do
+		local num = tonumber(key)
+		if num and slot.unitId then
+			local unit = inv[slot.unitId]
+			local cfg = unit and entryConfig(unit.name)
+			if cfg and cfg.kind == "Unit" then
+				local okR, order = pcall(function() return Rar.Get(cfg.getRarity(unit.attributes or {})).sortOrder end)
+				if okR and order >= minOrder then
+					local cur = tonumber(slot.level) or 1
+					while active() and cur < levelTarget do
+						local okCost, cost = pcall(UU.GetLevelUpCost, slot.unitId, cur)
+						if not okCost then break end
+						local money = tonumber(getData("Money")) or 0
+						if money < (tonumber(cost) or math.huge) then break end
+						pcall(function() Remotes.LevelUpSlot:FireServer(num) end)
+						count += 1
+						cur += 1
+						task.wait(0.15)
+					end
+				end
+			end
+		end
+	end
+	return count
+end
+
+local levelLoop = newLoop("Auto Level Up", function(active)
+	levelPass(active)
+	return 3
+end, 3)
+
+addToggle(levelCard, "Auto Level Up Slots", "AnimeDiceAutoLevelUp", levelLoop)
+levelCard:Button({
+	Name = "Level up once",
+	Callback = function()
+		task.spawn(function()
+			local n = levelPass(function() return true end)
+			notify("Level Up", n > 0 and ("%d level(s) applied"):format(n) or "Nothing to level.")
+		end)
+	end
+})
+levelSettings:Dropdown({
+	Name = "Minimum rarity", Options = RARITIES, Default = "Common",
+	Flag = "AnimeDiceLevelMinRarity",
+	Callback = function(v) levelMinRarity = first(v) or "Common" end
+})
+levelSettings:Slider({
+	Name = "Target level", Min = 2, Max = 100, Default = 10, Step = 1,
+	Flag = "AnimeDiceLevelTarget",
+	Callback = function(v) levelTarget = tonumber(v) or 10 end
+})
+
+----------------------------------------------------------------------
+-- POTIONS / BOOSTS
+----------------------------------------------------------------------
+local potionCard = PotionTab:Card("Auto Use Potions")
+local gradeCard  = PotionTab:Card("Grade & Trait")
+
+local autoPotionList = {}
+local function usePotions()
+	local BC = getModule("Buffs.BuffController")
+	local inv = getData("Inventory")
+	if not BC or type(inv) ~= "table" then return 0 end
+	local used = 0
+	for id, item in pairs(inv) do
+		local cfg = entryConfig(item.name)
+		if cfg and (cfg.kind == "Boost" or cfg.kind == "Potion") then
+			if autoPotionList[item.name] ~= false then
+				pcall(function() Remotes.UseBoost:FireServer(id) end)
+				used += 1
+				task.wait(0.15)
+			end
+		end
+	end
+	return used
+end
+
+local potionLoop = newLoop("Auto Use Potions", function()
+	usePotions()
+	return 8
+end, 8)
+
+addToggle(potionCard, "Auto Use Potions", "AnimeDiceAutoPotions", potionLoop)
+potionCard:Button({
+	Name = "Use all now",
+	Callback = function()
+		task.spawn(function()
+			local n = usePotions()
+			notify("Potions", n > 0 and ("%d potion(s) used"):format(n) or "Nothing to use.")
+		end)
+	end
+})
+
+local gradeLoop = newLoop("Auto Grade", function()
+	local inv = getData("Inventory")
+	if type(inv) ~= "table" then return 4 end
+	for id, item in pairs(inv) do
+		local cfg = entryConfig(item.name)
+		if cfg and cfg.kind == "Unit" then
+			local grade = item.attributes and item.attributes.grade
+			if not grade or grade == "Normal" then
+				pcall(function() Remotes.GradeRoll:FireServer(id) end)
+				task.wait(0.3)
+			end
+		end
+	end
+	return 4
+end, 4)
+
+local traitLoop = newLoop("Auto Trait", function()
+	local inv = getData("Inventory")
+	if type(inv) ~= "table" then return 4 end
+	for id, item in pairs(inv) do
+		local cfg = entryConfig(item.name)
+		if cfg and cfg.kind == "Unit" then
+			local trait = item.attributes and item.attributes.trait
+			if not trait then
+				pcall(function() Remotes.TraitRoll:FireServer(id) end)
+				task.wait(0.3)
+			end
+		end
+	end
+	return 4
+end, 4)
+
+addToggle(gradeCard, "Auto Grade Units", "AnimeDiceAutoGrade", gradeLoop)
+addToggle(gradeCard, "Auto Trait Units", "AnimeDiceAutoTrait", traitLoop)
+
+----------------------------------------------------------------------
+-- AUTO SELL
+----------------------------------------------------------------------
+local sellCard = SellTab:Card("Auto Sell")
+
+local sellMinRarity = "Common"
+local sellMutation = false
+local sellInterval = 20
+
+local function sellInventory()
+	local Reg = getModule("Inventory.EntryRegistry")
+	local Rar = getModule("Other.Rarities", Framework)
+	local inv = getData("Inventory")
+	if not Reg or not Rar or type(inv) ~= "table" then return 0 end
+
+	local okMin, minOrder = pcall(function() return Rar.Get(sellMinRarity).sortOrder end)
+	minOrder = okMin and minOrder or 0
+
+	local ids = {}
+	for id, item in pairs(inv) do
+		local cfg = entryConfig(item.name)
+		if cfg and cfg.kind == "Unit" then
+			local okR, order = pcall(function() return Rar.Get(cfg.getRarity(item.attributes or {})).sortOrder end)
+			if okR and order <= minOrder then
+				local mut = item.attributes and item.attributes.mutation
+				if not sellMutation or mut then
+					ids[#ids + 1] = id
+				end
+			end
+		end
+	end
+	if #ids > 0 then
+		pcall(function() Remotes.SellInventory:FireServer(ids) end)
+	end
+	return #ids
+end
+
+local sellLoop = newLoop("Auto Sell", function()
+	sellInventory()
+	return sellInterval
+end, 20)
+
+addToggle(sellCard, "Auto Sell Units", "AnimeDiceAutoSell", sellLoop)
+sellCard:Dropdown({
+	Name = "Rarity to sell up to", Options = RARITIES, Default = "Common",
+	Flag = "AnimeDiceSellRarity",
+	Callback = function(v) sellMinRarity = first(v) or "Common" end
+})
+sellCard:Toggle({
+	Name = "Only sell mutated units", Flag = "AnimeDiceSellOnlyMut",
+	Callback = function(v) sellMutation = (v == true) end
+})
+sellCard:Slider({
+	Name = "Sell interval", Min = 5, Max = 120, Default = 20, Step = 1, Suffix = "s",
+	Flag = "AnimeDiceSellInterval",
+	Callback = function(v) sellInterval = math.max(tonumber(v) or 20, 5) end
+})
+sellCard:Button({
+	Name = "Sell now",
+	Callback = function()
+		task.spawn(function()
+			local n = sellInventory()
+			notify("Sell", n > 0 and ("%d unit(s) sold"):format(n) or "Nothing to sell.")
+		end)
+	end
+})
+
+----------------------------------------------------------------------
+-- MISC
+----------------------------------------------------------------------
+local miscCard = MiscTab:Card("Misc")
+local afkCard  = MiscTab:Card("Anti-AFK")
+
+miscCard:Button({
+	Name = "Rejoin server",
+	Callback = function()
+		local ok = pcall(function()
+			local opts = Instance.new("TeleportOptions")
+			opts.ServerInstanceId = game.JobId
+			TeleportService:TeleportAsync(game.PlaceId, { LocalPlayer }, opts)
+		end)
+		notify("Rejoin", ok and "Teleporting..." or "Failed to rejoin.")
+	end
+})
+miscCard:Button({
+	Name = "Server hop",
+	Callback = function()
+		task.spawn(function()
+			notify("Server hop", "Looking for an open server...")
+			local ok = pcall(function()
+				local req = (syn and syn.request) or (fluxus and fluxus.request) or http_request
+				if not req then error("no http_request") end
+				local res = req({
+					Url = ("https://games.roblox.com/v1/games/%d/servers/Public?sortOrder=Asc&limit=100"):format(game.PlaceId),
+					Method = "GET",
+				})
+				local body = HttpService:JSONDecode(res.Body)
+				local pick
+				for _, s in ipairs(body.data or {}) do
+					if s.playing < s.maxPlayers and s.id ~= game.JobId then
+						pick = s.id
+						break
+					end
+				end
+				if not pick then error("no servers") end
+				local opts = Instance.new("TeleportOptions")
+				opts.ServerInstanceId = pick
+				TeleportService:TeleportAsync(game.PlaceId, { LocalPlayer }, opts)
+			end)
+			if not ok then
+				notify("Server hop", "No available servers found.")
+			end
+		end)
+	end
+})
+miscCard:Button({
+	Name = "Stop all loops",
+	Callback = function()
+		stopAll()
+		notify("Stopped", "All loops disabled.")
+	end
+})
+miscCard:Button({
+	Name = "Unload script",
+	Callback = function()
+		unload()
+	end
+})
+
+local function startAfk()
+	if afkConn then return end
+	afkConn = LocalPlayer.Idled:Connect(function()
+		pcall(function()
+			VirtualInputManager:SendMouseButtonEvent(0, 0, 0, true, game, 1)
+			VirtualInputManager:SendMouseButtonEvent(0, 0, 0, false, game, 1)
+		end)
+	end)
+end
+local function stopAfk()
+	if afkConn then afkConn:Disconnect(); afkConn = nil end
+end
+
+afkCard:Toggle({
+	Name = "Anti-AFK", Flag = "AnimeDiceAntiAFK",
+	Callback = function(v)
+		if v == true then startAfk() else stopAfk() end
+	end
+})
+
+----------------------------------------------------------------------
+-- AUTO HUB (Towers)
+----------------------------------------------------------------------
+local towerCard = HubTab:Card("Tower")
+
+local function towerInfo()
+	local T = getModule("Towers.Towers")
+	local data = getData("Towers")
+	if not T or type(data) ~= "table" then return nil end
+	return data
+end
+
+local function runTower()
+	local T = getModule("Towers.Towers")
+	local data = towerInfo()
+	if not T or not data then return false end
+	pcall(function() Remotes.EquipTowerTeam:FireServer() end)
+	task.wait(0.3)
+	local play = pcall(function() Remotes.PlayTower:FireServer() end)
+	return play
+end
+
+local towerLoop = newLoop("Auto Tower", function(active)
+	local data = towerInfo()
+	if data and data.floor then
+		pcall(function() Remotes.CompleteFloor:FireServer() end)
+		task.wait(0.3)
+	end
+	runTower()
+	return 6
+end, 6)
+
+addToggle(towerCard, "Auto Tower", "AnimeDiceAutoTower", towerLoop)
+towerCard:Button({
+	Name = "Play tower now",
+	Callback = function()
+		task.spawn(function()
+			local ok = runTower()
+			notify("Tower", ok and "Tower started." or "Failed to start.")
+		end)
+	end
+})
+towerCard:Button({
+	Name = "Cancel tower",
+	Callback = function()
+		task.spawn(function()
+			pcall(function() Remotes.CancelTower:FireServer() end)
+			notify("Tower", "Cancel request sent.")
+		end)
+	end
+})
+
+----------------------------------------------------------------------
+-- CONFIG
+----------------------------------------------------------------------
+task.spawn(function()
+	task.wait(1)
+	pcall(function() UI:LoadConfig() end)
+end)
+
+notify("NemoHubs", "Anime-Dice loaded. Press RightShift to toggle.")
+
+----------------------------------------------------------------------
+-- VIP / PRIVATE SERVER GUARD
+----------------------------------------------------------------------
+if game:GetService("RobloxReplicatedStorage"):WaitForChild("GetServerType"):InvokeServer() == "VIPServer" then
+	game:GetService("Players").LocalPlayer:Kick("VIP / Private Server detected.\nAnimeDice Private Server is on Outage\nPlease join a PUBLIC server.")
+	return
+end
+
+----------------------------------------------------------------------
+-- FULL SERVER GUARD
+----------------------------------------------------------------------
+task.spawn(function()
+	local maxPlayers = 9   -- this game's server size
+	local settle = 2       -- seconds to wait so the player list can fully replicate
+
+	task.wait(settle)
+
+	-- Kick only while the server is full (9/9).
+	if #Players:GetPlayers() >= maxPlayers then
+		pcall(function()
+			LocalPlayer:Kick(("Server Failure.\nPlease Rejoin."):format(#Players:GetPlayers(), maxPlayers))
+		end)
+	end
+end)
